@@ -54,6 +54,12 @@ UKF::UKF() {
 
   Hint: one or more values initialized above might be wildly off...
   */
+	n_x_ = 5;
+	n_aug_ = n_x_ + 2;
+	x_ = Eigen::VectorXd(n_x_);
+	Xsig_pred_ = Eigen::MatrixXd(n_x_, 2*n_aug_+1);
+	Xsig_aug_ = Eigen::MatrixXd(n_aug_,2*n_aug_+1);
+	
 }
 
 UKF::~UKF() {}
@@ -76,6 +82,105 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
  * @param {double} delta_t the change in time (in seconds) between the last
  * measurement and this one.
  */
+void UKF::GenerateSigmaPoints()
+{
+	// Generate augmented sigma points
+	MatrixXd z1 = MatrixXd::Constant(n_x_,n_aug_-n_x_,0);
+	MatrixXd z2 = MatrixXd::Constant(n_aug_-n_x_,n_x_,0);
+	
+	MatrixXd Q(2,2);
+	Q << std_a_*std_a_, 0,
+	0, std_yawdd_*std_yawdd_;
+	
+	MatrixXd P_aug = MatrixXd(n_aug_, n_aug_);
+	P_aug << P_, z1,z2,Q;
+	
+	MatrixXd B = MatrixXd(n_aug_, n_aug_);
+	B = P_aug.llt().matrixL();
+	
+	Eigen::VectorXd x_aug = Eigen::VectorXd(n_aug_);
+	for (int i = 0; i<n_aug_; i++)
+	{
+		if (i < n_x_)
+			x_aug(i) = x_(i);
+		else
+			x_aug(i) = 0;
+	}
+	MatrixXd X7= MatrixXd(7,7);
+	for (int i =0; i<n_aug_; i++)
+		X7.col(i) = x_aug;
+	
+	Xsig_aug_ << x_aug, X7+(sqrt(lambda_+n_aug_)*B),  (X7-sqrt(lambda_+n_aug_)*B);
+	
+	
+}
+
+void UKF::PredictSigmaPoints(double delta_t)
+{
+	for (int i = 0; i< 2*n_aug_ + 1; i++)
+	{
+		double mu_psy  = Xsig_aug_(6,i);
+		double mu_a    = Xsig_aug_(5,i);
+		double psy_dot = Xsig_aug_(4,i);
+		double psy     = Xsig_aug_(3,i);
+		double v       = Xsig_aug_(2,i);
+		double y       = Xsig_aug_(1,i);
+		double x       = Xsig_aug_(0,i);
+		
+		VectorXd additional1(n_x_);
+		VectorXd additional2(n_x_);
+		VectorXd x_i(n_x_);
+		
+		x_i << x, y, v, psy, psy_dot;
+		
+		additional2 << 0.5*delta_t*delta_t*cos(psy)*mu_a,
+		               0.5*delta_t*delta_t*sin(psy)*mu_a,
+		               delta_t*mu_a,
+		               0.5*delta_t*delta_t*mu_psy,
+		               delta_t*mu_psy;
+		
+		if (psy_dot  > 0.0001)
+		{
+			additional1 <<  v/psy_dot * ( sin (psy + psy_dot*delta_t) - sin(psy)),
+			v/psy_dot*( -cos(psy + psy_dot * delta_t)+ cos(psy) ),
+			0,
+			psy_dot *delta_t,
+			0;
+		}
+		else
+		{
+			additional1 <<  v*cos(psy)*delta_t,
+			v*sin(psy)*delta_t,
+			0,
+			psy_dot*delta_t,
+			0;
+		}
+		//std::cout << additional1 << std::endl;
+		Xsig_pred_.col(i) = x_i + additional1 + additional2;
+		
+	}
+	
+}
+void UKF::PredictMeanAndCovariance()
+{
+	VectorXd weights = VectorXd(2*n_aug_+1);
+	weights(0) = lambda_ / (lambda_ + n_aug_);
+	for (int i = 1; i < 2*n_aug_ + 1; i++)
+	{
+		weights(i) = 1 /(2* (lambda_ + n_aug_) );
+	}
+	x_.fill(0.0);
+	for (int i = 0; i < 2*n_aug_ + 1; i++)
+	{
+		x_ = x_ + Xsig_pred_.col(i) * weights(i);
+	}
+	P_.fill(0.0);
+	for (int i = 0; i < 2*n_aug_ + 1; i++)
+	{
+		P_ = P_ +  weights(i) * (Xsig_pred_.col(i)-x_) *(Xsig_pred_.col(i)-x_).transpose() ;
+	}
+	
+}
 void UKF::Prediction(double delta_t) {
   /**
   TODO:
@@ -83,6 +188,9 @@ void UKF::Prediction(double delta_t) {
   Complete this function! Estimate the object's location. Modify the state
   vector, x_. Predict sigma points, the state, and the state covariance matrix.
   */
+	GenerateSigmaPoints();
+	PredictSigmaPoints(delta_t);
+	PredictMeanAndCovariance();
 }
 
 /**
@@ -114,3 +222,20 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   You'll also need to calculate the radar NIS.
   */
 }
+
+void UKF::PredictLidarMeasurements(MeasurementPackage meas_package) { 
+	<#code#>;
+}
+
+void UKF::PredictRadarMeasurements(MeasurementPackage meas_package) { 
+	<#code#>;
+}
+
+void UKF::UdpdateState() { 
+	<#code#>;
+}
+
+
+
+
+

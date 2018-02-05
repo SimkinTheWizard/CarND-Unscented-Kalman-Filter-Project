@@ -30,6 +30,7 @@ public:
 
   ///* predicted sigma points matrix
   MatrixXd Xsig_pred_;
+  MatrixXd Xsig_aug_;
 
   ///* time when the state is true, in us
   long long time_us_;
@@ -90,18 +91,25 @@ public:
    * @param delta_t Time between k and k+1 in s
    */
   void Prediction(double delta_t);
+  void GenerateSigmaPoints();
+  void PredictSigmaPoints(double delta_t);
+  void PredictMeanAndCovariance();
 
   /**
    * Updates the state and the state covariance matrix using a laser measurement
    * @param meas_package The measurement at k+1
    */
   void UpdateLidar(MeasurementPackage meas_package);
+  void PredictLidarMeasurements(MeasurementPackage meas_package);
 
   /**
    * Updates the state and the state covariance matrix using a radar measurement
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
+	void PredictRadarMeasurements(MeasurementPackage meas_package);
+	
+	void UdpdateState();
 };
 
 #endif /* UKF_H */
