@@ -31,6 +31,13 @@ public:
   ///* predicted sigma points matrix
   MatrixXd Xsig_pred_;
   MatrixXd Xsig_aug_;
+	
+  ///* Update variables
+	// Thee variables will change depending on measurement type
+  VectorXd z_pred ;
+  MatrixXd S;
+  MatrixXd Zsig ;
+  int n_z_;
 
   ///* time when the state is true, in us
   long long time_us_;
@@ -100,16 +107,14 @@ public:
    * @param meas_package The measurement at k+1
    */
   void UpdateLidar(MeasurementPackage meas_package);
-  void PredictLidarMeasurements(MeasurementPackage meas_package);
-
+  void PredictLidarMeasurements();
   /**
    * Updates the state and the state covariance matrix using a radar measurement
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
-	void PredictRadarMeasurements(MeasurementPackage meas_package);
-	
-	void UdpdateState();
+  void PredictRadarMeasurements();
+  void UdpdateState(MeasurementPackage meas_package);
 };
 
 #endif /* UKF_H */

@@ -56,9 +56,19 @@ UKF::UKF() {
   */
 	n_x_ = 5;
 	n_aug_ = n_x_ + 2;
+	
 	x_ = Eigen::VectorXd(n_x_);
 	Xsig_pred_ = Eigen::MatrixXd(n_x_, 2*n_aug_+1);
 	Xsig_aug_ = Eigen::MatrixXd(n_aug_,2*n_aug_+1);
+	
+	lambda_ = 3 - n_aug_;
+	
+	weights_ = VectorXd(2*n_aug_+1);
+	weights_(0) = lambda_ / (lambda_ + n_aug_);
+	for (int i = 1; i < 2*n_aug_ + 1; i++)
+	{
+		weights_(i) = 1 /(2* (lambda_ + n_aug_) );
+	}
 	
 }
 
@@ -163,21 +173,16 @@ void UKF::PredictSigmaPoints(double delta_t)
 }
 void UKF::PredictMeanAndCovariance()
 {
-	VectorXd weights = VectorXd(2*n_aug_+1);
-	weights(0) = lambda_ / (lambda_ + n_aug_);
-	for (int i = 1; i < 2*n_aug_ + 1; i++)
-	{
-		weights(i) = 1 /(2* (lambda_ + n_aug_) );
-	}
+
 	x_.fill(0.0);
 	for (int i = 0; i < 2*n_aug_ + 1; i++)
 	{
-		x_ = x_ + Xsig_pred_.col(i) * weights(i);
+		x_ = x_ + Xsig_pred_.col(i) * weights_(i);
 	}
 	P_.fill(0.0);
 	for (int i = 0; i < 2*n_aug_ + 1; i++)
 	{
-		P_ = P_ +  weights(i) * (Xsig_pred_.col(i)-x_) *(Xsig_pred_.col(i)-x_).transpose() ;
+		P_ = P_ +  weights_(i) * (Xsig_pred_.col(i)-x_) *(Xsig_pred_.col(i)-x_).transpose() ;
 	}
 	
 }
@@ -223,17 +228,106 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   */
 }
 
-void UKF::PredictLidarMeasurements(MeasurementPackage meas_package) { 
-	<#code#>;
+void UKF::PredictLidarMeasurements() {
+	n_z_ = 2;
+	z_pred = VectorXd(n_z_);
+	Zsig = MatrixXd(n_z_, 2 * n_aug_ + 1);
+	S = MatrixXd(n_z_,n_z_);
+	for (int i = 0; i<2*n_aug_ + 1; i++)
+	{
+		double px      = Xsig_pred_(0,i);
+		double py      = Xsig_pred_(1,i);
+		double v       = Xsig_pred_(2,i);
+		double psy     = Xsig_pred_(3,i);
+		double psy_dot = Xsig_pred_(4,i);
+		
+		Zsig.col(i) << px, py;
+		// unused parameters
+		(void) (v);
+		(void) (psy);
+		(void) (psy_dot);
+	}
+	
+	z_pred.fill(0.0);
+	for (int i = 0; i<2*n_aug_ + 1; i++)
+	{
+		z_pred += Zsig.col(i) * weights_(i);
+	}
+	
+	MatrixXd R = MatrixXd(n_z_,n_z_);
+	R << std_laspx_*std_laspx_, 0 ,
+	     0, std_laspy_*std_laspy_;
+	
+	S.fill(0.0);
+	for (int i = 0; i<2*n_aug_ + 1; i++)
+	{
+		S += (Zsig.col(i)-z_pred)*(Zsig.col(i)-z_pred).transpose()* weights_(i);
+	}
+	S += R;
 }
 
-void UKF::PredictRadarMeasurements(MeasurementPackage meas_package) { 
-	<#code#>;
+
+
+void UKF::PredictRadarMeasurements() {
+	n_z_ = 3;
+	z_pred = VectorXd(n_z_);
+	Zsig = MatrixXd(n_z_, 2 * n_aug_ + 1);
+	S = MatrixXd(n_z_,n_z_);
+	for (int i = 0; i<2*n_aug_ + 1; i++)
+	{
+		double px      = Xsig_pred_(0,i);
+		double py      = Xsig_pred_(1,i);
+		double v       = Xsig_pred_(2,i);
+		double psy     = Xsig_pred_(3,i);
+		double psy_dot = Xsig_pred_(4,i);
+		
+		Zsig.col(i) << sqrt (px*px + py*py),
+		               px < 0.001 ? 0 : atan(py/px),
+		               (px*cos(psy)*v + py*sin(psy)*v)/sqrt (px*px + py*py);
+		// unused parameter
+		(void) (psy_dot);
+	}
+	
+	z_pred.fill(0.0);
+	for (int i = 0; i<2*n_aug_ + 1; i++)
+	{
+		z_pred += Zsig.col(i) * weights_(i);
+	}
+	
+	MatrixXd R = MatrixXd(n_z_,n_z_);
+	R << std_radr_*std_radr_, 0 , 0,
+	     0, std_radphi_*std_radphi_, 0,
+	     0, 0, std_radrd_*std_radrd_;
+	
+	S.fill(0.0);
+	for (int i = 0; i<2*n_aug_ + 1; i++)
+	{
+		S += (Zsig.col(i)-z_pred)*(Zsig.col(i)-z_pred).transpose()* weights_(i);
+	}
+	S += R;
 }
 
-void UKF::UdpdateState() { 
-	<#code#>;
+void UKF::UdpdateState(MeasurementPackage meas_package) {
+	
+	MatrixXd Tc = MatrixXd(n_z_, n_z_);
+	Eigen::VectorXd z ;
+	z = meas_package.raw_measurements_;
+	Tc.fill(0.0);
+	for (int i = 0; i< 2*n_aug_+1 ; i++)
+	{
+		Tc += weights_(i) * (Xsig_pred_.col(i) - x_) * (Zsig.col(i) - z_pred).transpose();
+	}
+	
+	MatrixXd K =  Tc* S.inverse();
+	
+	x_ = x_ + K * (z-z_pred);
+	
+	P_ = P_ - K * S * K.transpose();
+	
 }
+
+
+
 
 
 
