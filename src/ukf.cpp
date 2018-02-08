@@ -70,6 +70,8 @@ UKF::UKF() {
 		weights_(i) = 1 /(2* (lambda_ + n_aug_) );
 	}
 	
+	is_initialized_ = false;
+	
 }
 
 UKF::~UKF() {}
@@ -85,6 +87,58 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   Complete this function! Make sure you switch between lidar and radar
   measurements.
   */
+	if (!is_initialized_)
+	{
+		if (meas_package.sensor_type_ == MeasurementPackage::RADAR)
+		{
+			float rho = meas_package.raw_measurements_[0];
+			float theta = meas_package.raw_measurements_[1];
+			float rho_dot = meas_package.raw_measurements_[2];
+			
+			
+			float px = rho * cos(theta);
+			float py = rho * sin(theta);
+			float vx = rho_dot * cos(theta);
+			float vy = rho_dot * sin(theta);
+			
+			x_ << px,
+			      py,
+			      sqrt(vx*vx + vy*vy),
+			      vx < 0.001? 0: atan(vy/vx),
+			      0;
+		}
+		else if (meas_package.sensor_type_ == MeasurementPackage::LASER)
+		{
+			x_ << meas_package.raw_measurements_[0],
+			      meas_package.raw_measurements_[1],
+			      0,
+			      0,
+			      0;
+		}
+		
+		P_ << 100, 0, 0, 0, 0,
+		      0, 100, 0, 0, 0,
+			  0, 0, 100, 0, 0,
+		      0, 0, 0, 100, 0,
+		      0, 0, 0, 0, 100;
+		
+		time_us_ = meas_package.timestamp_;
+		is_initialized_ = true;
+	}
+	float dt  = (meas_package.timestamp_ - time_us_) / 1000000.0;
+	time_us_ = meas_package.timestamp_;
+	
+	Prediction(dt);
+	
+	if (meas_package.sensor_type_ == MeasurementPackage::RADAR)
+	{
+		UpdateRadar(meas_package);
+	}
+	else if (meas_package.sensor_type_ == MeasurementPackage::LASER)
+	{
+		UpdateLidar(meas_package);
+	}
+	
 }
 
 /**
@@ -211,6 +265,8 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the lidar NIS.
   */
+	PredictLidarMeasurements();
+	UdpdateState(meas_package);
 }
 
 /**
@@ -226,6 +282,8 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the radar NIS.
   */
+	PredictRadarMeasurements();
+	UdpdateState(meas_package);
 }
 
 void UKF::PredictLidarMeasurements() {
@@ -309,8 +367,8 @@ void UKF::PredictRadarMeasurements() {
 
 void UKF::UdpdateState(MeasurementPackage meas_package) {
 	
-	MatrixXd Tc = MatrixXd(n_z_, n_z_);
-	Eigen::VectorXd z ;
+	MatrixXd Tc = MatrixXd(n_x_, n_z_);
+	Eigen::MatrixXd z ;
 	z = meas_package.raw_measurements_;
 	Tc.fill(0.0);
 	for (int i = 0; i< 2*n_aug_+1 ; i++)
