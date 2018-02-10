@@ -2,6 +2,8 @@
 #include "Eigen/Dense"
 #include <iostream>
 
+#define PI 3.14
+
 using namespace std;
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
@@ -25,10 +27,10 @@ UKF::UKF() {
   P_ = MatrixXd(5, 5);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 30;
+  std_a_ = 3;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 30;
+  std_yawdd_ = PI/10;
   
   //DO NOT MODIFY measurement noise values below these are provided by the sensor manufacturer.
   // Laser measurement noise standard deviation position1 in m
@@ -116,11 +118,11 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 			      0;
 		}
 		
-		P_ << 100, 0, 0, 0, 0,
-		      0, 100, 0, 0, 0,
-			  0, 0, 100, 0, 0,
-		      0, 0, 0, 100, 0,
-		      0, 0, 0, 0, 100;
+		P_ << 1, 0, 0, 0, 0,
+		      0, 1, 0, 0, 0,
+			  0, 0, 1, 0, 0,
+		      0, 0, 0, 1, 0,
+		      0, 0, 0, 0, 1;
 		
 		time_us_ = meas_package.timestamp_;
 		is_initialized_ = true;
@@ -128,15 +130,23 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 	float dt  = (meas_package.timestamp_ - time_us_) / 1000000.0;
 	time_us_ = meas_package.timestamp_;
 	
-	Prediction(dt);
+	//Prediction(dt);
 	
 	if (meas_package.sensor_type_ == MeasurementPackage::RADAR)
 	{
-		UpdateRadar(meas_package);
+		if (use_radar_)
+		{
+			Prediction(dt);
+			UpdateRadar(meas_package);
+		}
 	}
 	else if (meas_package.sensor_type_ == MeasurementPackage::LASER)
 	{
-		UpdateLidar(meas_package);
+		if(use_laser_)
+		{
+			Prediction(dt);
+			UpdateLidar(meas_package);
+		}
 	}
 	
 }
@@ -176,7 +186,6 @@ void UKF::GenerateSigmaPoints()
 	
 	Xsig_aug_ << x_aug, X7+(sqrt(lambda_+n_aug_)*B),  (X7-sqrt(lambda_+n_aug_)*B);
 	
-	
 }
 
 void UKF::PredictSigmaPoints(double delta_t)
@@ -203,7 +212,7 @@ void UKF::PredictSigmaPoints(double delta_t)
 		               0.5*delta_t*delta_t*mu_psy,
 		               delta_t*mu_psy;
 		
-		if (psy_dot  > 0.0001)
+		if (psy_dot  > 0.01)
 		{
 			additional1 <<  v/psy_dot * ( sin (psy + psy_dot*delta_t) - sin(psy)),
 			v/psy_dot*( -cos(psy + psy_dot * delta_t)+ cos(psy) ),
@@ -223,6 +232,7 @@ void UKF::PredictSigmaPoints(double delta_t)
 		Xsig_pred_.col(i) = x_i + additional1 + additional2;
 		
 	}
+	
 	
 }
 void UKF::PredictMeanAndCovariance()
@@ -322,6 +332,7 @@ void UKF::PredictLidarMeasurements() {
 		S += (Zsig.col(i)-z_pred)*(Zsig.col(i)-z_pred).transpose()* weights_(i);
 	}
 	S += R;
+
 }
 
 
@@ -339,9 +350,20 @@ void UKF::PredictRadarMeasurements() {
 		double psy     = Xsig_pred_(3,i);
 		double psy_dot = Xsig_pred_(4,i);
 		
-		Zsig.col(i) << sqrt (px*px + py*py),
-		               px < 0.001 ? 0 : atan(py/px),
-		               (px*cos(psy)*v + py*sin(psy)*v)/sqrt (px*px + py*py);
+		double rho = sqrt (px*px + py*py);
+		double theta = px < 0.01 ? 0 : atan(py/px);
+		double rho_dot = rho > 0.01 ? (px*cos(psy)*v + py*sin(psy)*v)/sqrt (px*px + py*py) : 0;
+		
+		//while (theta>2*PI)
+		//	theta -= 2*PI;
+		//while (theta<-2*PI)
+		//	theta += 2*PI;
+
+        Zsig.col(i) << rho,
+		               theta,
+		               rho_dot;
+ 
+
 		// unused parameter
 		(void) (psy_dot);
 	}
@@ -363,6 +385,10 @@ void UKF::PredictRadarMeasurements() {
 		S += (Zsig.col(i)-z_pred)*(Zsig.col(i)-z_pred).transpose()* weights_(i);
 	}
 	S += R;
+	
+	
+	std::cout << "Zsig  : " << Zsig  << std::endl;
+
 }
 
 void UKF::UdpdateState(MeasurementPackage meas_package) {
@@ -381,6 +407,7 @@ void UKF::UdpdateState(MeasurementPackage meas_package) {
 	x_ = x_ + K * (z-z_pred);
 	
 	P_ = P_ - K * S * K.transpose();
+	
 	
 }
 
