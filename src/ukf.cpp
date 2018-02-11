@@ -228,7 +228,7 @@ void UKF::PredictSigmaPoints(double delta_t)
 			psy_dot*delta_t,
 			0;
 		}
-		//std::cout << additional1 << std::endl;
+
 		Xsig_pred_.col(i) = x_i + additional1 + additional2;
 		
 	}
@@ -387,7 +387,7 @@ void UKF::PredictRadarMeasurements() {
 	S += R;
 	
 	
-	std::cout << "Zsig  : " << Zsig  << std::endl;
+
 
 }
 
