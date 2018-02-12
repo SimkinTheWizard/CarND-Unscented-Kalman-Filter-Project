@@ -30,6 +30,7 @@ UKF::UKF() {
   std_a_ = 3;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
+  // The car completes 2*PI turn in approx. 10 seconds so PI/10 is a good value
   std_yawdd_ = PI/10;
   
   //DO NOT MODIFY measurement noise values below these are provided by the sensor manufacturer.
@@ -73,6 +74,10 @@ UKF::UKF() {
 	}
 	
 	is_initialized_ = false;
+	
+	H_lidar_ = Eigen::MatrixXd(2,n_x_);
+	H_lidar_ << 1, 0, 0, 0, 0,
+	            0, 1, 0, 0, 0;
 	
 }
 
@@ -275,8 +280,9 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the lidar NIS.
   */
-	PredictLidarMeasurements();
-	UdpdateState(meas_package);
+	//PredictLidarMeasurements();
+	//UdpdateState(meas_package);
+	UpdateLinear(meas_package.raw_measurements_);
 }
 
 /**
@@ -409,6 +415,33 @@ void UKF::UdpdateState(MeasurementPackage meas_package) {
 	P_ = P_ - K * S * K.transpose();
 	
 	
+}
+
+
+
+void UKF::UpdateLinear(const VectorXd &z) {
+	/**
+	 TODO:
+	 * update the state by using Kalman Filter equations
+	 */
+	n_z_ = 2;
+	MatrixXd R = MatrixXd(n_z_,n_z_);
+	R << std_laspx_*std_laspx_, 0 ,
+	0, std_laspy_*std_laspy_;
+	
+	VectorXd z_pred = H_lidar_ * x_;
+	VectorXd y = z - z_pred;
+	MatrixXd Ht = H_lidar_.transpose();
+	MatrixXd S = H_lidar_ * P_ * Ht + R;
+	MatrixXd Si = S.inverse();
+	MatrixXd PHt = P_ * Ht;
+	MatrixXd K = PHt * Si;
+	
+	//new estimate
+	x_ = x_ + (K * y);
+	long x_size = x_.size();
+	MatrixXd I = MatrixXd::Identity(x_size, x_size);
+	P_ = (I - K * H_lidar_) * P_;
 }
 
 

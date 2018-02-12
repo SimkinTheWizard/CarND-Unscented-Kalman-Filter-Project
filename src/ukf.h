@@ -115,6 +115,11 @@ public:
   void UpdateRadar(MeasurementPackage meas_package);
   void PredictRadarMeasurements();
   void UdpdateState(MeasurementPackage meas_package);
+	
+	// Linear Kalman Filter update functions for improving real time performance
+	Eigen::MatrixXd H_lidar_;
+	void UpdateLinear(const VectorXd &z);
+	
 };
 
 #endif /* UKF_H */
